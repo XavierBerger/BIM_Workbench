@@ -22,7 +22,7 @@
 
 """This module contains FreeCAD commands for the BIM workbench"""
 
-import os,FreeCAD,FreeCADGui
+import os,sys,FreeCAD,FreeCADGui
 from FreeCAD import Vector
 from DraftTools import translate
 
@@ -59,6 +59,8 @@ class BIM_Setup:
 
         # check missing addons
         self.form.labelMissingWorkbenches.hide()
+        self.form.labelIfcOpenShell.hide()
+        self.form.labelSnapTip.hide()
         m = []
         try:
             import RebarTools
@@ -68,10 +70,16 @@ class BIM_Setup:
             import BIMServer
         except:
             m.append("WebTools")
-        try:
-            import CommandsFrame
-        except:
-            m.append("Flamingo")
+        if sys.version_info.major < 3:
+            try:
+                import CommandsFrame
+            except:
+                m.append("Flamingo")
+        else:
+            try:
+                import CFrame
+            except:
+                m.append("Dodo")
         try:
             import FastenerBase
         except:
@@ -80,6 +88,12 @@ class BIM_Setup:
             import report
         except:
             m.append("Reporting")
+        try:
+            import ifcopenshell
+        except:
+            ifcok = False
+        else:
+            ifcok = True
         libok = False
         librarypath = FreeCAD.ParamGet('User parameter:Plugins/parts_library').GetString('destination','')
         if librarypath and os.path.exists(librarypath):
@@ -93,8 +107,13 @@ class BIM_Setup:
         if not libok:
             m.append("Parts Library")
         if m:
-            self.form.labelMissingWorkbenches.setText(translate("BIM","Tip: Some additional workbenches are not installed, that extend BIM functionality:")+" <b>"+",".join(m)+"</b>. "+translate("BIM","You can install them from menu Tools -> Addon manager."))
+            t = translate("BIM","Some additional workbenches are not installed, that extend BIM functionality:")+" <b>"+",".join(m)+"</b>. "+translate("BIM","You can install them from menu Tools -> Addon manager.")
+            self.form.labelMissingWorkbenches.setText(t)
             self.form.labelMissingWorkbenches.show()
+        if not ifcok:
+            self.form.labelIfcOpenShell.show()
+        if FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Draft").GetString("snapModes","111111111101111") == "111111111101111":
+            self.form.labelSnapTip.show()
 
         # show dialog and exit if cancelled
         FreeCADGui.BIMSetupDialog = True # this is there to be easily detected by the BIM tutorial
@@ -165,6 +184,10 @@ class BIM_Setup:
         FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Arch").SetUnsigned("ColorHelpers",self.form.colorButtonHelpers.property("color").rgb()<<8)
         FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Draft").SetUnsigned("constructioncolor",self.form.colorButtonConstruction.property("color").rgb()<<8)
         FreeCAD.ParamGet("User parameter:BaseApp/Preferences/View").SetUnsigned("ConstructionColor",self.form.colorButtonConstruction.property("color").rgb()<<8)
+        height = self.form.settingCameraHeight.value()
+        FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Draft").SetInt("defaultCameraHeight",height)
+
+
         # set the orbit mode to turntable
         FreeCAD.ParamGet("User parameter:BaseApp/Preferences/View").SetInt("OrbitStyle",0)
         # turn thumbnails on
@@ -188,6 +211,10 @@ class BIM_Setup:
         if hasattr(FreeCADGui,"draftToolBar"):
             FreeCADGui.draftToolBar.widthButton.setValue(linewidth)
             FreeCADGui.draftToolBar.fontsizeButton.setValue(tsize)
+
+        # set the grid
+        if hasattr(FreeCADGui,"Snapper"):
+            FreeCADGui.Snapper.setGrid()
 
         # set the status bar widgets
         mw = FreeCADGui.getMainWindow()
@@ -232,6 +259,7 @@ class BIM_Setup:
         colLine = None
         colHelp = None
         colConst = None
+        height = None
 
         if preset == 0:
             # the "Choose..." item from the presets box. Do nothing
@@ -250,6 +278,7 @@ class BIM_Setup:
             bkp = 2
             bimdefault = 2
             newdoc = False
+            height = 4500
 
         elif preset == 2:
            # meters
@@ -264,6 +293,7 @@ class BIM_Setup:
             bkp = 2
             bimdefault = 2
             newdoc = False
+            height = 4500
 
         elif preset == 3:
            # US
@@ -278,6 +308,7 @@ class BIM_Setup:
             bkp = 2
             bimdefault = 2
             newdoc = False
+            height = 4500
 
         elif preset == None:
             # get values from settings
@@ -314,6 +345,7 @@ class BIM_Setup:
             colLine = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/View").GetUnsigned("DefaultShapeLineColor",255)
             colHelp = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Arch").GetUnsigned("ColorHelpers",674321151)
             colConst = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Draft").GetUnsigned("constructioncolor",746455039)
+            height = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Draft").GetInt("defaultCameraHeight",5)
             
         if unit != None:
             self.form.settingUnits.setCurrentIndex(unit)
@@ -357,6 +389,8 @@ class BIM_Setup:
             self.form.colorButtonHelpers.setProperty("color",getPrefColor(colHelp))
         if colConst != None:
             self.form.colorButtonConstruction.setProperty("color",getPrefColor(colConst))
+        if height:
+            self.form.settingCameraHeight.setValue(height)
         # TODO - antialiasing?
 
 def getPrefColor(color):
